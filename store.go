@@ -13,11 +13,11 @@ type Store struct {
 
 type Config struct {
 	Arma2OAPath  string
-	Arma2Path    string
-	Arma3Path    string
-	Arma2CO      bool
 	Arma2Profile string
+	Arma2Params  string
+	Arma3Path    string
 	Arma3Profile string
+	Arma3Params  string
 }
 
 func NewStore() *Store {

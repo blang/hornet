@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 )
 
@@ -45,16 +44,39 @@ func (api *RestAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (api *RestAPI) RegisterEndPoints() {
 	api.router.HandleFunc("/config", api.handleConfig)
+	api.router.HandleFunc("/launch", api.handleLaunch)
 
 }
 
 type PubConfig struct {
 	Arma2OAPath  string `json:"arma2oapath"`
-	Arma2Path    string `json:"arma2path"`
-	Arma3Path    string `json:"arma3path"`
-	Arma2CO      bool   `json:"arma2co"`
 	Arma2Profile string `json:"arma2profile"`
+	Arma2Params  string `json:"arma2params"`
+	Arma3Path    string `json:"arma3path"`
 	Arma3Profile string `json:"arma3profile"`
+	Arma3Params  string `json:"arma3params"`
+}
+
+type PubLaunchConfig struct {
+	Name      string `json:"name"`
+	Game      string `json:"game"`
+	Modstring string `json:"modstring"`
+	Betamod   string `json:"betamod"`
+	Host      string `json:"host"`
+	Port      int    `json:"port"`
+	Password  string `json:"password"`
+}
+
+func (c *PubLaunchConfig) LaunchConfig() *LaunchConfig {
+	return &LaunchConfig{
+		Name:      c.Name,
+		Game:      c.Game,
+		Modstring: c.Modstring,
+		Betamod:   c.Betamod,
+		Host:      c.Host,
+		Port:      c.Port,
+		Password:  c.Password,
+	}
 }
 
 func (api *RestAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -101,11 +123,11 @@ func (api *RestAPI) buildPubConfig(config *Config) *PubConfig {
 	}
 	return &PubConfig{
 		Arma2OAPath:  config.Arma2OAPath,
-		Arma2Path:    config.Arma2Path,
-		Arma3Path:    config.Arma3Path,
-		Arma2CO:      config.Arma2CO,
 		Arma2Profile: config.Arma2Profile,
+		Arma2Params:  config.Arma2Params,
+		Arma3Path:    config.Arma3Path,
 		Arma3Profile: config.Arma3Profile,
+		Arma3Params:  config.Arma3Params,
 	}
 }
 
@@ -114,10 +136,31 @@ func (api *RestAPI) savePubConfig(config *Config, pubConf *PubConfig) error {
 		return fmt.Errorf("Could not save config")
 	}
 	config.Arma2OAPath = pubConf.Arma2OAPath
-	config.Arma2Path = pubConf.Arma2Path
 	config.Arma2Profile = pubConf.Arma2Profile
+	config.Arma2Params = pubConf.Arma2Params
 	config.Arma3Path = pubConf.Arma3Path
 	config.Arma3Profile = pubConf.Arma3Profile
-	config.Arma2CO = pubConf.Arma2CO
+	config.Arma3Params = pubConf.Arma3Params
 	return nil
+}
+
+func (api *RestAPI) handleLaunch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	var pubLaunchConfig PubLaunchConfig
+	err := json.NewDecoder(r.Body).Decode(&pubLaunchConfig)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	launchConfig := pubLaunchConfig.LaunchConfig()
+	err = api.service.Launch(launchConfig)
+	if err != nil {
+		w.WriteHeader(http.StatusConflict)
+		b, _ := json.Marshal(&PubError{err.Error()})
+		w.Write(b)
+	}
 }
