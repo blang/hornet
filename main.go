@@ -18,6 +18,12 @@ func main() {
 	)
 	flag.Parse()
 
+	err := AutoUpdate("1.0.0")
+	if err != nil {
+		log.Printf("Error: %v", err)
+	}
+	return
+
 	store, err := RestoreStore(*storeFile)
 	if err != nil {
 		log.Printf("Could not read store from file %q, error: %q", *storeFile, err)
