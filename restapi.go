@@ -43,6 +43,7 @@ func (api *RestAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *RestAPI) RegisterEndPoints() {
+	api.router.HandleFunc("/ping", api.handlePing)
 	api.router.HandleFunc("/config", api.handleConfig)
 	api.router.HandleFunc("/launch", api.handleLaunch)
 
@@ -77,6 +78,10 @@ func (c *PubLaunchConfig) LaunchConfig() *LaunchConfig {
 		Port:      c.Port,
 		Password:  c.Password,
 	}
+}
+
+func (api *RestAPI) handlePing(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
 func (api *RestAPI) handleConfig(w http.ResponseWriter, r *http.Request) {
