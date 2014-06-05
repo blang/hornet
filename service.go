@@ -49,6 +49,13 @@ func (s *Service) Launch(conf *LaunchConfig) error {
 		s.process = procd.NewProcess(cwd, exe, args)
 		s.process.Start()
 	case "a3":
+		err := s.checkArma3()
+		if err != nil {
+			return err
+		}
+		cwd, exe, args := s.compileParams(s.Config().Arma3Path, "arma3.exe", s.Config().Arma3Params, s.Config().Arma3Profile, conf)
+		s.process = procd.NewProcess(cwd, exe, args)
+		s.process.Start()
 		return errors.New("Not yet implemented")
 	default:
 		return errors.New("Unknown gametype")
@@ -86,6 +93,29 @@ func (s *Service) checkArma2OA() error {
 	return nil
 }
 
+func (s *Service) checkArma3() error {
+	if s.Config().Arma3Path == "" {
+		return errors.New("Arma3Path not configured")
+	}
+	fi, err := os.Stat(s.Config().Arma3Path)
+	if err != nil {
+		return fmt.Errorf("Arma3 Path not exists: %q", s.Config().Arma3Path)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("Arma3 Path is not a directory: %q", s.Config().Arma3Path)
+	}
+	exePath := path.Join(s.Config().Arma3Path, "arma3.exe")
+	fi, err = os.Stat(exePath)
+	if err != nil {
+		return fmt.Errorf("Arma3 Executable path not exists: %q", exePath)
+	}
+	if !(fi.Size() > 0) {
+		return fmt.Errorf("Arma3 Executable not exists: ", exePath)
+	}
+
+	return nil
+}
+
 func (s *Service) compileParams(cwd, exe string, addParams string, profile string, conf *LaunchConfig) (string, string, []string) {
 	startPath := path.Join(cwd, exe)
 	if conf.Betamod != "" {
@@ -93,6 +123,9 @@ func (s *Service) compileParams(cwd, exe string, addParams string, profile strin
 	}
 
 	args := []string{
+		"-nosplash",
+		"-world=empty",
+		"-pause",
 		"-connect=" + conf.Host,
 		"-port=" + strconv.Itoa(conf.Port),
 		"-password=" + conf.Password,
