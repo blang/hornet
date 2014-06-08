@@ -129,7 +129,6 @@ func (s *Service) compileParams(cwd, exe string, addParams string, profile strin
 		"-connect=" + conf.Host,
 		"-port=" + strconv.Itoa(conf.Port),
 		"-password=" + conf.Password,
-		"-profiles=" + profile,
 		"-name=" + profile,
 		"-mod=" + conf.Modstring,
 	}
