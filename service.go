@@ -132,6 +132,6 @@ func (s *Service) compileParams(cwd, exe string, addParams string, profile strin
 		"-name=" + profile,
 		"-mod=" + conf.Modstring,
 	}
-	args = append(args, strings.Split(addParams, " ")...)
+	args = append(args, strings.Split(addParams, "|")...)
 	return cwd, startPath, args
 }
