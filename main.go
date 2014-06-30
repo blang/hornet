@@ -2,10 +2,12 @@ package main
 
 import (
 	"flag"
+	"github.com/cratonica/trayhost"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 )
 
@@ -33,9 +35,15 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGINT, syscall.SIGTERM)
 
+	trayCloseCh := make(chan bool)
+	tray(trayCloseCh)
+
 	// Block until a signal is received.
-	s := <-c
-	log.Println("Received signal %q, shut down gracefully", s)
+	select {
+	case s := <-c:
+		log.Println("Received signal %q, shut down gracefully", s)
+	case <-trayCloseCh:
+	}
 
 	err = store.SaveStore(*storeFile)
 	if err != nil {
@@ -46,4 +54,20 @@ func main() {
 	service.Shutdown()
 
 	log.Printf("Graceful shutdown complete")
+}
+
+func tray(ch chan bool) {
+	runtime.LockOSThread()
+
+	go func() {
+		// Be sure to call this to link the tray icon to the target url
+		trayhost.SetUrl("http://hornet.echo12.de")
+	}()
+
+	// Enter the host system's event loop
+	trayhost.EnterLoop("Hornet", iconData)
+
+	// This is only reached once the user chooses the Exit menu item
+	log.Println("Tray Exiting")
+	close(ch)
 }
