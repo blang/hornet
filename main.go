@@ -25,8 +25,6 @@ func main() {
 		log.Println("Successfully updated/Already up to date")
 	}
 
-	return
-
 	store, err := RestoreStore(*storeFile)
 	if err != nil {
 		log.Printf("Could not read store from file %q, error: %q", *storeFile, err)
