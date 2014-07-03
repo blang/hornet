@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"github.com/cratonica/trayhost"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -15,15 +17,30 @@ func main() {
 	var (
 		listen    = flag.String("listen", "127.0.0.1:7000", "REST API, e.g. 127.0.0.1:7000")
 		storeFile = flag.String("store", "store.gob", "Store file")
+		debug     = flag.Bool("debug", false, "Enable debug mode")
 	)
 	flag.Parse()
 
-	err := AutoUpdate("0.1.0", "blang/gosqm-slotlist")
-	if err != nil {
-		log.Printf("Error: %v\n", err)
+	// Setup logging
+	if *debug {
+		log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+		f, err := os.OpenFile("debug.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatalf("Could not write debug.log: %s", err)
+		}
+		log.SetOutput(io.MultiWriter(f, os.Stdout))
 	} else {
-		log.Println("Successfully updated/Already up to date")
+		log.SetOutput(ioutil.Discard)
 	}
+	log.Println("Log ready")
+	go func() {
+		err := AutoUpdate("0.1.0", "blang/gosqm-slotlist")
+		if err != nil {
+			log.Printf("Error: %v\n", err)
+		} else {
+			log.Println("Successfully updated/Already up to date")
+		}
+	}()
 
 	store, err := RestoreStore(*storeFile)
 	if err != nil {
@@ -43,12 +60,12 @@ func main() {
 	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGINT, syscall.SIGTERM)
 
 	trayCloseCh := make(chan bool)
-	tray(trayCloseCh)
+	go tray(trayCloseCh)
 
 	// Block until a signal is received.
 	select {
 	case s := <-c:
-		log.Println("Received signal %q, shut down gracefully", s)
+		log.Printf("Received signal %q, shut down gracefully\n", s)
 	case <-trayCloseCh:
 	}
 
@@ -66,10 +83,8 @@ func main() {
 func tray(ch chan bool) {
 	runtime.LockOSThread()
 
-	go func() {
-		// Be sure to call this to link the tray icon to the target url
-		trayhost.SetUrl("http://hornet.echo12.de")
-	}()
+	// Be sure to call this to link the tray icon to the target url
+	trayhost.SetUrl("http://hornet.echo12.de")
 
 	// Enter the host system's event loop
 	trayhost.EnterLoop("Hornet", iconData)
