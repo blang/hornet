@@ -13,6 +13,18 @@ import (
 	"syscall"
 )
 
+// Autoupdate github repository (eg. blang/hornet).
+// Inserted on compiletime
+var gh_repo string
+
+// Url to webinterface
+// Inserted on compiletime
+var webif_url string
+
+// Current version
+// Inserted on compiletime
+var version string
+
 func main() {
 	var (
 		listen    = flag.String("listen", "127.0.0.1:7000", "REST API, e.g. 127.0.0.1:7000")
@@ -32,9 +44,10 @@ func main() {
 	} else {
 		log.SetOutput(ioutil.Discard)
 	}
-	log.Println("Log ready")
+
+	log.Println("Version: " + version)
 	go func() {
-		err := AutoUpdate("0.1.0", "blang/gosqm-slotlist")
+		err := AutoUpdate("0.1.0", gh_repo)
 		if err != nil {
 			log.Printf("Error: %v\n", err)
 		} else {
@@ -84,7 +97,7 @@ func tray(ch chan bool) {
 	runtime.LockOSThread()
 
 	// Be sure to call this to link the tray icon to the target url
-	trayhost.SetUrl("http://hornet.echo12.de")
+	trayhost.SetUrl(webif_url)
 
 	// Enter the host system's event loop
 	trayhost.EnterLoop("Hornet", iconData)
