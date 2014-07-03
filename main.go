@@ -18,10 +18,13 @@ func main() {
 	)
 	flag.Parse()
 
-	err := AutoUpdate("1.0.0")
+	err := AutoUpdate("0.1.0", "blang/gosqm-slotlist")
 	if err != nil {
-		log.Printf("Error: %v", err)
+		log.Printf("Error: %v\n", err)
+	} else {
+		log.Println("Successfully updated/Already up to date")
 	}
+
 	return
 
 	store, err := RestoreStore(*storeFile)

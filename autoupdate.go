@@ -5,37 +5,40 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/blang/semver"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-type GithubRelease struct {
+const gh_release_url = "https://api.github.com/repos/%s/releases"
+
+type githubRelease struct {
 	ID          int                  `json:"id"`
+	Name        string               `json:"name"`
 	Tag         string               `json:"tag_name"`
 	Draft       bool                 `json:"draft"`
 	PublishedAt string               `json:"published_at"`
-	Assets      []GithubReleaseAsset `json:"assets"`
+	Assets      []githubReleaseAsset `json:"assets"`
 }
 
-type GithubReleaseAsset struct {
+type githubReleaseAsset struct {
 	Url         string `json:"url"`
 	ContentType string `json:"content_type"`
 }
 
-const GH_RELEASE_URL = "https://api.github.com/repos/blang/gosqm-slotlist/releases"
-
-func AutoUpdate(version string) error {
-	resp, err := http.Get(GH_RELEASE_URL)
+func AutoUpdate(version string, repository string) error {
+	ghReleaseURL := fmt.Sprintf(gh_release_url, repository)
+	resp, err := http.Get(ghReleaseURL)
 	if err != nil {
 		return err
 	}
 
-	var releases []GithubRelease
+	var releases []githubRelease
 	err = json.NewDecoder(resp.Body).Decode(&releases)
 	if err != nil {
 		return err
@@ -46,6 +49,12 @@ func AutoUpdate(version string) error {
 	}
 
 	recent := releases[0]
+	if newer, err := isNewerVersion(version, recent.Name); err != nil {
+		return err
+	} else if !newer {
+		return nil
+	}
+
 	if len(recent.Assets) == 0 {
 		return errors.New("Most recent release has no assets")
 	}
@@ -59,8 +68,71 @@ func AutoUpdate(version string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("File written: %s", file.Name())
+	err = swapExecutable(file.Name())
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func isNewerVersion(currentversion string, rawVersion string) (bool, error) {
+	curV, err := semver.New(currentversion)
+	if err != nil {
+		return false, err
+	}
+	rawVersion = strings.Trim(rawVersion, " \t")
+	rawVersion = strings.TrimPrefix(rawVersion, "v")
+	rawVersion = (strings.SplitN(rawVersion, " ", 2))[0]
+	newV, err := semver.New(rawVersion)
+	if err != nil {
+		return false, err
+	}
+
+	// Don't allow prereleases
+	if len(newV.Pre) > 0 {
+		return false, nil
+	}
+	return newV.GT(curV), nil
+}
+
+func swapExecutable(newFileName string) error {
+	const oldSuffix = ".old"
+	exePath := os.Args[0]
+	oldExePath := exePath + oldSuffix
+	if _, err := os.Stat(oldExePath); err == nil {
+		os.Remove(oldExePath)
+	}
+	err := os.Rename(exePath, oldExePath)
+	if err != nil {
+		return err
+	}
+	err = copyFile(newFileName, exePath)
+	if err != nil {
+		//Try to restore
+		os.Rename(oldExePath, exePath)
+		return err
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	s, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	// no need to check errors on read only file, we already got everything
+	// we need from the filesystem, so nothing can go wrong now.
+	defer s.Close()
+	d, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(d, s); err != nil {
+		d.Close()
+		return err
+	}
+	return d.Close()
 }
 
 func downloadToTmp(assetUrl string) (*os.File, error) {
@@ -77,7 +149,7 @@ func downloadToTmp(assetUrl string) (*os.File, error) {
 
 	r := bufio.NewReader(binresp.Body)
 
-	tmpFile, err := ioutil.TempFile("", "hornet")
+	tmpFile, err := ioutil.TempFile("", "autoupdatear")
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +203,7 @@ func downloadToTmp(assetUrl string) (*os.File, error) {
 	}
 	zFileReader := bufio.NewReader(zFileHandle)
 
-	tmpExtrFile, err := ioutil.TempFile("", "hornet")
+	tmpExtrFile, err := ioutil.TempFile("", "autoupdate")
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +230,5 @@ func downloadToTmp(assetUrl string) (*os.File, error) {
 	if err = w.Flush(); err != nil {
 		return nil, err // TODO: Log this error?
 	}
-
 	return tmpExtrFile, nil
 }
