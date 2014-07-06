@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +19,7 @@ func AutoUpdate(currentVersion string, pushrHost string, pushrRelease string, pu
 	client := pushr.NewClient(pushrHost, pushrReadToken, "")
 	v, versionStr, err := client.LatestVersion(pushrRelease, pushrChannel)
 	if err != nil {
-		log.Printf("Latest version error")
+		log.Printf("Latest version error: %s", err)
 		return err
 	}
 	if v.ContentType != "application/zip" {
@@ -40,7 +39,7 @@ func AutoUpdate(currentVersion string, pushrHost string, pushrRelease string, pu
 		return err
 	}
 	tmpFile.Close()
-	// TODO: Don't forget to remove the tmp file
+
 	defer os.Remove(tmpFile.Name())
 
 	err = client.Download(pushrRelease, versionStr, tmpFile.Name())
@@ -48,7 +47,14 @@ func AutoUpdate(currentVersion string, pushrHost string, pushrRelease string, pu
 		return err
 	}
 
-	err = swapExecutable(tmpFile.Name())
+	exFile, err := extractZip(tmpFile.Name())
+	if err != nil {
+		log.Printf("Error while extracting: %s", err)
+		return err
+	}
+	defer os.Remove(exFile.Name())
+
+	err = swapExecutable(exFile.Name())
 	if err != nil {
 		return err
 	}
@@ -114,54 +120,22 @@ func copyFile(src, dst string) error {
 	return d.Close()
 }
 
-func downloadToTmp(assetUrl string) (*os.File, error) {
-	req, err := http.NewRequest("GET", assetUrl, nil)
+func extractZip(zipfilename string) (*os.File, error) {
+	fin, err := os.OpenFile(zipfilename, os.O_RDONLY, 0666)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/octet-stream")
-	client := &http.Client{}
-	binresp, err := client.Do(req)
+	defer fin.Close()
+
+	finInfo, err := fin.Stat()
 	if err != nil {
 		return nil, err
 	}
-
-	r := bufio.NewReader(binresp.Body)
-
-	tmpFile, err := ioutil.TempFile("", "autoupdatear")
-	if err != nil {
-		return nil, err
-	}
-	// TODO: Don't forget to remove the tmp file
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
-	w := bufio.NewWriter(tmpFile)
-	buf := make([]byte, 1024)
-	for {
-		// read a chunk
-		n, err := r.Read(buf)
-		if err != nil && err != io.EOF {
-			return nil, err // TODO: Log this error?
-		}
-		if n == 0 {
-			break
-		}
-
-		// write a chunk
-		if _, err := w.Write(buf[:n]); err != nil {
-			return nil, err // TODO: Log this error?
-		}
-	}
-
-	if err = w.Flush(); err != nil {
-		return nil, err // TODO: Log this error?
-	}
-
 	//reset tmpFile
-	tmpFile.Seek(0, 0)
-
-	zr, err := zip.NewReader(tmpFile, binresp.ContentLength)
+	fin.Seek(0, 0)
+	zr, err := zip.NewReader(fin, finInfo.Size())
 	if err != nil {
+		log.Printf("Error on new zip reader: %s", err)
 		return nil, err
 	}
 	var zFile *zip.File
@@ -188,8 +162,8 @@ func downloadToTmp(assetUrl string) (*os.File, error) {
 	}
 	// TODO: Don't forget to remove the tmp file
 	defer tmpExtrFile.Close()
-	w = bufio.NewWriter(tmpExtrFile)
-	buf = make([]byte, 1024)
+	w := bufio.NewWriter(tmpExtrFile)
+	buf := make([]byte, 1024)
 	for {
 		// read a chunk
 		n, err := zFileReader.Read(buf)
@@ -209,5 +183,6 @@ func downloadToTmp(assetUrl string) (*os.File, error) {
 	if err = w.Flush(); err != nil {
 		return nil, err // TODO: Log this error?
 	}
+
 	return tmpExtrFile, nil
 }
