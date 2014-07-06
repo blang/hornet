@@ -13,9 +13,21 @@ import (
 	"syscall"
 )
 
-// Autoupdate github repository (eg. blang/hornet).
+// Autoupdate pushr host.
 // Inserted on compiletime
-var gh_repo string
+var pushr_host string
+
+// Autoupdate pushr release.
+// Inserted on compiletime
+var pushr_release string
+
+// Autoupdate pushr channel.
+// Inserted on compiletime
+var pushr_channel string
+
+// Autoupdate pushr readtoken.
+// Inserted on compiletime
+var pushr_readtoken string
 
 // Url to webinterface
 // Inserted on compiletime
@@ -47,9 +59,9 @@ func main() {
 
 	log.Println("Version: " + version)
 	go func() {
-		err := AutoUpdate("0.1.0", gh_repo)
+		err := AutoUpdate(version, pushr_host, pushr_release, pushr_channel, pushr_readtoken)
 		if err != nil {
-			log.Printf("Error: %v\n", err)
+			log.Printf("Error while auto update: %v\n", err)
 		} else {
 			log.Println("Successfully updated/Already up to date")
 		}

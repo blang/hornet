@@ -3,76 +3,56 @@ package main
 import (
 	"archive/zip"
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/blang/pushr"
 	"github.com/blang/semver"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-const gh_release_url = "https://api.github.com/repos/%s/releases"
-
-type githubRelease struct {
-	ID          int                  `json:"id"`
-	Name        string               `json:"name"`
-	Tag         string               `json:"tag_name"`
-	Draft       bool                 `json:"draft"`
-	PublishedAt string               `json:"published_at"`
-	Assets      []githubReleaseAsset `json:"assets"`
-}
-
-type githubReleaseAsset struct {
-	Url         string `json:"url"`
-	ContentType string `json:"content_type"`
-}
-
-func AutoUpdate(version string, repository string) error {
-	ghReleaseURL := fmt.Sprintf(gh_release_url, repository)
-	resp, err := http.Get(ghReleaseURL)
+func AutoUpdate(currentVersion string, pushrHost string, pushrRelease string, pushrChannel string, pushrReadToken string) error {
+	client := pushr.NewClient(pushrHost, pushrReadToken, "")
+	v, versionStr, err := client.LatestVersion(pushrRelease, pushrChannel)
+	if err != nil {
+		log.Printf("Latest version error")
+		return err
+	}
+	if v.ContentType != "application/zip" {
+		return fmt.Errorf("Content-Type %s not supported", v.ContentType)
+	}
+	newer, err := isNewerVersion(currentVersion, versionStr)
 	if err != nil {
 		return err
 	}
-
-	var releases []githubRelease
-	err = json.NewDecoder(resp.Body).Decode(&releases)
-	if err != nil {
-		return err
-	}
-
-	if len(releases) == 0 {
-		return errors.New("No releases found")
-	}
-
-	recent := releases[0]
-	if newer, err := isNewerVersion(version, recent.Name); err != nil {
-		return err
-	} else if !newer {
+	if !newer {
+		log.Printf("Already on the newest version: %s\n", currentVersion)
 		return nil
 	}
 
-	if len(recent.Assets) == 0 {
-		return errors.New("Most recent release has no assets")
-	}
-
-	recentAsset := recent.Assets[0]
-	if recentAsset.ContentType != "application/zip" {
-		return errors.New("Most recent release asset is not a zip file")
-	}
-
-	file, err := downloadToTmp(recentAsset.Url)
+	tmpFile, err := ioutil.TempFile("", "autoupdatear")
 	if err != nil {
 		return err
 	}
-	err = swapExecutable(file.Name())
+	tmpFile.Close()
+	// TODO: Don't forget to remove the tmp file
+	defer os.Remove(tmpFile.Name())
+
+	err = client.Download(pushrRelease, versionStr, tmpFile.Name())
 	if err != nil {
 		return err
 	}
 
+	err = swapExecutable(tmpFile.Name())
+	if err != nil {
+		return err
+	}
+	log.Printf("Successfully updated to: %s\n", versionStr)
 	return nil
 }
 
@@ -83,7 +63,6 @@ func isNewerVersion(currentversion string, rawVersion string) (bool, error) {
 	}
 	rawVersion = strings.Trim(rawVersion, " \t")
 	rawVersion = strings.TrimPrefix(rawVersion, "v")
-	rawVersion = (strings.SplitN(rawVersion, " ", 2))[0]
 	newV, err := semver.New(rawVersion)
 	if err != nil {
 		return false, err
