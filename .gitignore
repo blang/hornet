@@ -2,3 +2,5 @@ hornet
 store.gob
 iconwin.go
 iconunix.go
+build.sh
+debug.log
