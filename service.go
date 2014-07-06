@@ -56,7 +56,6 @@ func (s *Service) Launch(conf *LaunchConfig) error {
 		cwd, exe, args := s.compileParams(s.Config().Arma3Path, "arma3.exe", s.Config().Arma3Params, s.Config().Arma3Profile, conf)
 		s.process = procd.NewProcess(cwd, exe, args)
 		s.process.Start()
-		return errors.New("Not yet implemented")
 	default:
 		return errors.New("Unknown gametype")
 	}
